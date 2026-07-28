@@ -16,6 +16,7 @@ from collections import defaultdict
 
 
 def find_image(img_dir, stem):
+    """Find matching image (case-insensitive)."""
     stem_lower = stem.lower()
     for ext in (".jpg", ".jpeg", ".png", ".bmp", ".webp"):
         for fname in os.listdir(img_dir):
@@ -26,6 +27,7 @@ def find_image(img_dir, stem):
 
 
 def load_label_index(labels_dir):
+    """Build per-sample info: file, class_counts, total objects."""
     samples = []
     for fname in sorted(os.listdir(labels_dir)):
         if not fname.endswith(".txt"):
@@ -82,6 +84,7 @@ def assign_initial(samples, ratios):
 
 
 def evaluate(assignment, samples):
+    """Return (total_deviation, per_class_report, sets, set_totals)."""
     sets = {"train": [], "val": [], "test": []}
     for s in samples:
         sets[assignment[s["file"]]].append(s)
@@ -102,14 +105,25 @@ def evaluate(assignment, samples):
             )
             counts[split] = cnt
         class_report[cls] = counts
-    return total_dev, class_report, sets
+
+    # 每个子集的总目标数
+    set_totals = {}
+    for sp in ("train", "val", "test"):
+        set_totals[sp] = sum(
+            s["class_counts"].get(cls, 0)
+            for s in sets[sp]
+            for cls in s["class_counts"]
+        )
+
+    return total_dev, class_report, sets, set_totals
 
 
 def optimize(assignment, samples, max_iters=100):
+    """Iterative local search: swap samples to minimize deviation."""
     target = {"train": 0.7, "val": 0.2, "test": 0.1}
     total = len(samples)
     for _ in range(max_iters):
-        current_dev, _, sets = evaluate(assignment, samples)
+        current_dev, _, sets, _ = evaluate(assignment, samples)
         improved = False
         for s in samples:
             current_split = assignment[s["file"]]
@@ -141,6 +155,7 @@ def optimize(assignment, samples, max_iters=100):
 
 def copy_split(assignment, samples,
                src_labels_dir, src_img_dir, output_dir):
+    """Copy files to dataset/{train,val,test}/{images,labels}/."""
     for split in ("train", "val", "test"):
         os.makedirs(os.path.join(output_dir, split, "images"),
                     exist_ok=True)
@@ -162,34 +177,69 @@ def copy_split(assignment, samples,
             )
 
 
-def print_report(assignment, samples):
-    total_dev, class_report, sets = evaluate(assignment, samples)
-    total = len(samples)
+def print_report(assignment, samples, class_names=None):
+    """打印两级报表：样本级分布 + 类别级分布"""
     target = {"train": 0.7, "val": 0.2, "test": 0.1}
+    total_dev, class_report, sets, set_totals = evaluate(assignment, samples)
+    total = len(samples)
 
-    print("\n" + "=" * 52)
-    print("         Dataset Split Report")
-    print("=" * 52)
-    print(f"  Total samples: {total}")
-    print("-" * 52)
-    print(f"  {'Split':<10s} {'Count':>6s} {'Ratio':>8s} "
-          f"{'Target':>8s} {'Diff':>8s}")
-    print("-" * 52)
+    print("\n" + "=" * 66)
+    print("              数据集划分报告")
+    print("=" * 66)
+
+    # ── Part 1: 样本数分布 ──
+    print(f"\n  总样本数: {total}")
+    print("-" * 66)
+    print(f"  {'子集':<8s} {'样本数':>8s} {'比例':>8s} {'目标值':>8s} {'偏差':>8s}")
+    print("-" * 66)
     for split in ("train", "val", "test"):
         cnt = len(sets[split])
         ratio = cnt / total if total else 0
         diff = ratio - target[split]
-        print(f"  {split:<10s} {cnt:>6d} {ratio:>7.3f} "
-              f"{target[split]:>7.1f} {diff:>+7.4f}")
-    print(f"\n  Total deviation: {total_dev:.4f}")
-    print("-" * 52)
-    print(f"  {'Class':<15s} {'Train':>6s} {'Val':>6s} {'Test':>6s}")
-    print("-" * 52)
+        bar = "█" * int(cnt / max(total, 1) * 30)
+        print(f"  {split:<8s} {cnt:>8d} {ratio:>7.1%} "
+              f"{target[split]:>7.0%} {diff:>+7.2%}  {bar}")
+    print(f"\n  总偏差: {total_dev:.4f}")
+
+    # ── Part 2: 每类别在三个子集中的分布 ──
+    print("\n" + "=" * 66)
+    print("  各类别在子集中的目标数分布")
+    print("=" * 66)
+    h  = f"  {'类别':<12s} {'总数':>6s} {'训练':>8s}"
+    h += f" {'(占类)':>8s} {'(占集)':>8s}"
+    h += f" {'验证':>8s} {'(占类)':>8s} {'(占集)':>8s}"
+    h += f" {'测试':>8s} {'(占类)':>8s} {'(占集)':>8s}"
+    print(h)
+    print("-" * 66)
+
     for cls in sorted(class_report.keys()):
         c = class_report[cls]
-        print(f"  {cls:<15s} {c['train']:>6d} "
-              f"{c['val']:>6d} {c['test']:>6d}")
-    print("=" * 52)
+        cls_total = c["train"] + c["val"] + c["test"]
+        if cls_total == 0:
+            continue
+
+        t  = c["train"] / cls_total * 100 if cls_total else 0
+        v  = c["val"]   / cls_total * 100 if cls_total else 0
+        te = c["test"]  / cls_total * 100 if cls_total else 0
+
+        tp  = c["train"] / set_totals["train"] * 100 if set_totals["train"] else 0
+        vp  = c["val"]   / set_totals["val"]   * 100 if set_totals["val"]   else 0
+        tep = c["test"]  / set_totals["test"]  * 100 if set_totals["test"]  else 0
+
+        label = class_names[int(cls)] if class_names else cls
+
+        print(f"  {label:<12s} {cls_total:>6d}"
+              f" {c['train']:>8d} {t:>6.1f}% {tp:>6.1f}%"
+              f" {c['val']:>8d} {v:>6.1f}% {vp:>6.1f}%"
+              f" {c['test']:>8d} {te:>6.1f}% {tep:>6.1f}%")
+
+    print("-" * 66)
+    g_total = sum(set_totals.values())
+    print(f"  {'合计':<12s} {g_total:>6d}"
+          f" {set_totals['train']:>8d} {'100.0%':>8s} {'100.0%':>8s}"
+          f" {set_totals['val']:>8d} {'100.0%':>8s} {'100.0%':>8s}"
+          f" {set_totals['test']:>8d} {'100.0%':>8s} {'100.0%':>8s}")
+    print("=" * 66)
 
 
 def main():
@@ -215,9 +265,14 @@ def main():
     samples = load_label_index(args.labels_dir)
     print(f"  Loaded {len(samples)} samples")
 
-    with open(args.classes_file) as f:
-        classes = [line.strip() for line in f if line.strip()]
-    print(f"  {len(classes)} classes")
+    # 读取类别名称
+    class_names = []
+    with open(args.classes_file, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                class_names.append(line)
+    print(f"  {len(class_names)} classes: {class_names}")
 
     ratios = {"train": 0.7, "val": 0.2, "test": 0.1}
 
@@ -227,7 +282,8 @@ def main():
     print("Optimizing assignment...")
     assignment = optimize(assignment, samples, max_iters=100)
 
-    print_report(assignment, samples)
+    # 打印两级报表（传类别名称）
+    print_report(assignment, samples, class_names=class_names)
 
     print("Copying files...")
     copy_split(assignment, samples,
