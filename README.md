@@ -15,6 +15,7 @@ git clone https://github.com/kankan-veda/xml-dataset-preprocessor.git  ~/.codex/
 |------|------|------|
 | 第一步 | xml_to_yolo.py | XML 转 YOLO TXT（XML 尺寸优先，缺失时 PIL 回退） |
 | 第二步 | match_and_clean.py | 删除无对应图片的孤 TXT 文件 |
+| 第三步 | deduplicate_dataset.py | 检测重复图片，只保留一组 png+txt，其余移走 |
 | 第三步A | stats_and_filter.py | 统计标签分布，生成 filter_plan.yaml |
 | 第三步B | apply_filter.py | 按 YAML 配置执行过滤 |
 | 第四步 | smart_split.py | 分层采样 + 迭代优化，7:2:1 划分 |
@@ -31,6 +32,7 @@ git clone https://github.com/kankan-veda/xml-dataset-preprocessor.git  ~/.codex/
 ```bash
 python scripts/xml_to_yolo.py --xml-dir xmls/ --img-dir images/ --output-dir labels/ --classes-output classes.txt
 python scripts/match_and_clean.py --labels-dir labels/ --img-dir images/
+python scripts/deduplicate_dataset.py --img-dir labels/ --labels-dir images/ --output-dir duplicates/
 python scripts/stats_and_filter.py --labels-dir labels/ --img-dir images/ --output filter_plan.yaml
 # 编辑 filter_plan.yaml 后：
 python scripts/apply_filter.py --plan filter_plan.yaml --labels-dir labels/ --img-dir images/ --output-dir cleaned/
