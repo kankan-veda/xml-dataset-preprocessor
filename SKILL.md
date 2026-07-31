@@ -74,7 +74,24 @@ project/
 
 ---
 
-### 第三步：统计、配置、过滤（拆为 A/B 两个子步骤）
+### 第三步：重复数据去重
+
+`python scripts/deduplicate_dataset.py --img-dir <images> --labels-dir <labels> --output-dir <duplicates>`
+
+```
+遍历 images/ 下所有图片：
+  按文件内容计算 SHA-256
+  内容完全相同的图片归为一组（复制改名也算重复）
+  每组保留文件名排序第一的 png + 同名 txt
+  其余 png + 同名 txt 移动到 duplicates/（不删除，方便复查）
+  处理结果写入 logs/dedup_log.txt
+同组图片的 txt 内容不一致 → 打印 WARNING，保留第一份，其余照常移走
+```
+
+**设计理由：** 同一张图片如果以不同文件名重复出现在数据集中，划分时可能同时进入 train 和 test，造成数据泄露、指标虚高。用内容哈希而不是文件名判断，能发现复制改名的重复图片。移动而非删除，避免误判后无法恢复；确认无误后可手动清理 `duplicates/`。先加 `--dry-run` 预览，确认后再正式运行。
+
+
+### 第四步：统计、配置、过滤（拆为 A/B 两个子步骤）
 
 此步骤支持两种运行路径，选择权在用户：
 
@@ -83,7 +100,7 @@ project/
 | **Codex 对话模式**（默认） | Codex 编辑 YAML | Codex 读取终端输出展示给用户 → 用户口头确认 → Codex 写入 filter 字段 → 自动调 apply_filter.py |
 | **中间文件模式** | 用户手动编辑 | 用户打开 YAML 改 filter 字段 → 保存 → 自己跑 apply_filter.py |
 
-#### 第三步A：统计并生成配置文件
+#### 第四步A：统计并生成配置文件
 
 `python scripts/stats_and_filter.py --labels-dir <labels> --img-dir <images> --output <filter_plan.yaml>`
 
@@ -123,7 +140,7 @@ filter:
 
 **设计理由：** filter 段全设为 false，避免脚本替用户做决定。任何过滤行为都必须是主动选择的结果。YAML 文件持久化了过滤决策，可以回头复查。
 
-#### 第三步B：执行过滤
+#### 第四步B：执行过滤
 
 `python scripts/apply_filter.py --plan <filter_plan.yaml> --labels-dir <labels> --img-dir <images> --output-dir <cleaned>`
 
@@ -136,7 +153,7 @@ filter:
 
 ---
 
-### 第四步：7:2:1 智能划分
+### 第五步：7:2:1 智能划分
 
 `python scripts/smart_split.py --labels-dir <cleaned> --img-dir <img> --output-dir <dataset> --classes-file <classes.txt> [--seed 42]`
 
@@ -167,7 +184,7 @@ filter:
 
 ---
 
-### 第五步：最终校验
+### 第六步：最终校验
 
 `python scripts/final_validate.py --dataset-dir <dataset> --log-dir <logs>`
 
