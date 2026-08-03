@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Step 4: Smart split dataset into train/val/test at 7:2:1 ratio.
+"""Step 4: Smart split dataset into train/val/test at 8:1:1 ratio.
 
 Uses stratified sampling + iterative optimization.
 
@@ -90,7 +90,7 @@ def evaluate(assignment, samples):
         sets[assignment[s["file"]]].append(s)
     total = len(samples)
     actual_ratios = {k: len(v) / total for k, v in sets.items()}
-    target = {"train": 0.7, "val": 0.2, "test": 0.1}
+    target = {"train": 0.8, "val": 0.1, "test": 0.1}
     total_dev = sum(abs(actual_ratios[k] - target[k]) for k in target)
 
     all_classes = set()
@@ -120,7 +120,7 @@ def evaluate(assignment, samples):
 
 def optimize(assignment, samples, max_iters=100):
     """Iterative local search: swap samples to minimize deviation."""
-    target = {"train": 0.7, "val": 0.2, "test": 0.1}
+    target = {"train": 0.8, "val": 0.1, "test": 0.1}
     total = len(samples)
     for _ in range(max_iters):
         current_dev, _, sets, _ = evaluate(assignment, samples)
@@ -179,7 +179,7 @@ def copy_split(assignment, samples,
 
 def print_report(assignment, samples, class_names=None):
     """打印两级报表：样本级分布 + 类别级分布"""
-    target = {"train": 0.7, "val": 0.2, "test": 0.1}
+    target = {"train": 0.8, "val": 0.1, "test": 0.1}
     total_dev, class_report, sets, set_totals = evaluate(assignment, samples)
     total = len(samples)
 
@@ -244,7 +244,7 @@ def print_report(assignment, samples, class_names=None):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Smart split dataset 7:2:1"
+        description="Smart split dataset 8:1:1"
     )
     parser.add_argument("--labels-dir", required=True,
                         help="Labels directory (cleaned)")
@@ -274,7 +274,7 @@ def main():
                 class_names.append(line)
     print(f"  {len(class_names)} classes: {class_names}")
 
-    ratios = {"train": 0.7, "val": 0.2, "test": 0.1}
+    ratios = {"train": 0.8, "val": 0.1, "test": 0.1}
 
     print("Initializing stratified assignment...")
     assignment = assign_initial(samples, ratios)
