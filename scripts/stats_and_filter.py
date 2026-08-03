@@ -127,7 +127,7 @@ def write_yaml(stats, output_path):
         "object_count_distribution":
             stats["object_count_distribution"],
         "filter": {
-            "remove_zero_object": False,
+            "remove_zero_object": True,
             "remove_single_object": False,
             "remove_below_threshold": 0,
             "also_remove_images": True,
